@@ -1,1 +1,1 @@
-Test message for Pluralsight Analytics
+Test message for Pluralsight Analytics v2
