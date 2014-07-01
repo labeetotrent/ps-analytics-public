@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+    <head>
+		<!-- <script src="d3.min.js" charset="utf-8"></script> -->
+        <script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+        <script>
+			
+			
+			//call to load data and then build our viz
+            d3.json("https://api.github.com/repos/bsullins/ps-analytics-public/contents/server-msg.txt", function(error, data) {
+                
+                //check the file loaded properly
+                if (error) { 
+                    console.log(error); 
+                } else {      
+                    console.log(data);  //raw data
+                }
+                
+                //decode our base64 data
+                //and convert it into an array
+                var decodedData = window.atob(data.content); 
+                
+                 //see what we've got
+                 //should be [Object, Object]
+                console.log(decodedData);
+                
+                //display msg
+
+                d3.select("body").append("h1")
+                    .text(decodedData);
+            
+            });
+               
+        </script>
+    </head>
+    <body>
+    </body>
+</html>
