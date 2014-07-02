@@ -1,1 +1,1 @@
-<span style="font-size:26px; position:absolute; top:0px; left:250px; color:#F16621;">Server Maintenance Tonight (7/1/2014) from 4-6pm PST</span>
+Server Maintenance Tonight (7/1/2014) from 4-6pm PST
