@@ -1,6 +1,8 @@
 <!-- <span style="font-size:26px; color:#F16621;">Testing...</span> -->
 <script>
-  function create(htmlStr) {
+
+$(document).ready(function(){
+    function create(htmlStr) {
     var frag = document.createDocumentFragment(),
         temp = document.createElement('div');
     temp.innerHTML = htmlStr;
@@ -13,4 +15,5 @@
     var fragment = create('<div class="someclass"><a href="www.example.com"><p>some text</p></a></div>'); 
 
     document.body.insertBefore(fragment, document.body.childNodes[0]);
+});
 </script>
