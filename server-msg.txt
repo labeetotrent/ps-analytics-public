@@ -1,1 +1,1 @@
-<span style="font-size:26px; color:#F16621;>Test Message</span>
+<span style="font-size:26px; color:#F16621;">Test Message</span>
