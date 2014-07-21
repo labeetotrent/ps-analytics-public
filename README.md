@@ -8,7 +8,7 @@ https://github.com/bsullins/ps-analytics-public/blob/master/server-msg.txt
 
 ** Commented out example (will not show)
 
-<!-- <span style="font-size:26px; color:#F16621;">Testing...</span> -->
+\<!-- <span style="font-size:26px; color:#F16621;">Testing...</span> -->
 
 ** Uncommented example (will show)
 
