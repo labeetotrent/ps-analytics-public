@@ -1,1 +1,1 @@
- <span style="font-size:26px; color:#F16621;">Tableau Server Maintenance tonight, 7-21-2014, at 9 pst</span> 
+ <span style="font-size:26px; color:#F16621;">Tableau Server Maintenance tonight, 7-21-2014, at 9pm pst</span> 
