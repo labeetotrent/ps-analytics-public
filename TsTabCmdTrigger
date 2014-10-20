@@ -1,20 +1,5 @@
-## extract event test ##
-Set-StrictMode -Version Latest
 
-# login info as tabcmd doesn't take posh credential object
-$credentials = New-Object System.Management.Automation.PSCredential `
- -ArgumentList "<your Ts Username>", (Get-Content <path to secure pw>| ConvertTo-SecureString)
-
-# get the workbooks from server
-Set-Location $HOME
-
-## clearing old sessions
 tabcmd logout
-
-## can also use password file for tabcmd
-tabcmd login -s <your tableau server> `
- -u $credentials.UserName -p $credentials.GetNetworkCredential().Password  --no-certcheck 2>> c:\TabCmd\TabCmdLoginErr.txt
+tabcmd login -s <your tableau server> -u <your ts username>  --password-file <location to pw file> --no-certcheck
 tabcmd refreshextracts --datasource <data source> --project <project if not default> --no-certcheck 
-
-# cleanup and logout
-tabcmd logout 2>> C:\TabCmd\TabCmdLogoutErr.txt
+tabcmd logout
