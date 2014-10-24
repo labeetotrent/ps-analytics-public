@@ -1,0 +1,49 @@
+
+
+Set-Location C:\TsWorkbookPrep
+#Load the assembly
+[System.Reflection.Assembly]::LoadWithPartialName("System.IO.Compression.FileSystem") | Out-Null
+
+## download the workbook from server
+tabcmd login -s https://<your server> -u '<your username>' --password-file <path to your pw file> --no-certcheck
+tabcmd get "https://<your server>/workbooks/<your wb to update>.twbx" --filename "<Wb Name>.twbx"
+tabcmd logout
+
+## Rename and extract
+Rename-Item -Path '.\<Wb Name>.twbx' -NewName '<New Name>.zip'
+$pathToZip = 'C:\TsWorkbookPrep\<New Name>.zip'
+$targetDir = 'C:\TsWorkbookPrep\<New Name Directory>'
+
+#Unzip the file
+[System.IO.Compression.ZipFile]::ExtractToDirectory($pathToZip, $targetDir)
+
+
+ ###################################
+ ## update the formula            ##
+ ###################################
+
+
+$content = 'C:\TsWorkbookPrep\<New Name Directory>\<Wb Name>.twb'
+$xmldata = New-Object XML
+$xmldata.Load($content)
+
+#new calc
+$tsCalc = @"
+formula to update
+"@
+
+#testing new field name
+$newdata = $xmldata.SelectNodes('//workbook/datasources/datasource/column') | where {$_.Caption -like "<formula to update>"}
+$newdata | ForEach-Object {$_.calculation.formula = $tsCalc }    
+$xmldata.Save("C:\TsWorkbookPrep\<New Name Directory>\<Wb Name>.twb")
+
+## rezip the new file -- already loaded assembly above ##
+[System.IO.Compression.ZipFile]::CreateFromDirectory("C:\TsWorkbookPrep\<New Name Directory>","C:\TsWorkbookPrep\<New Name Directory>_v2.zip")
+
+## convert back to tableau twbx ##
+Rename-Item -Path 'C:\TsWorkbookPrep\<New Name Directory>_v2.zip' -NewName '<Wb Name>.twbx' -Force
+
+## login to server and republish wb ##
+tabcmd login -s https://<your server> -u '<your username>' --password-file <path to your pw file> -t uncertified --no-certcheck
+tabcmd publish 'C:\TsWorkbookPrep\<Wb Name>.twbx' --no-certcheck
+tabcmd logout
