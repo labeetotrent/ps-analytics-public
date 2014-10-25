@@ -10,7 +10,7 @@ Set-Location "C:\TsWorkbookPrep"             ## set to your working directory
 #Load the .Net assembly
 [System.Reflection.Assembly]::LoadWithPartialName("System.IO.Compression.FileSystem") | Out-Null
 
-## Edit this section only for variables ##
+## Edit for your workbook(s)  ##
 $myTableauServer     = "<your server>"
 $myTableauServerUser = "<your username>"
 $myTableauServerPW   = "<your server pw>"
@@ -20,7 +20,7 @@ $SetTsCalc           = "<your calculated field>"              ## name of calcula
 
 $tsCalc = @"                                  
 SUM([Sales]) / 100
-"@                                            ## new calculation/formula
+"@                                                            ## new calculation/formula
 
 
 ############################################
