@@ -1,49 +1,78 @@
+#Requires -Version 3
 
+#####################################################
+# Developed by Mike Roberts @ Pluralsight Data Team #
+# email: mike-roberts@pluralsight.com               #
+#####################################################
 
-Set-Location C:\TsWorkbookPrep
-#Load the assembly
+Set-Location "C:\TsWorkbookPrep"             ## set to your working directory
+
+#Load the .Net assembly
 [System.Reflection.Assembly]::LoadWithPartialName("System.IO.Compression.FileSystem") | Out-Null
 
+## Edit this section only for variables ##
+$myTableauServer     = "<your server>"
+$myTableauServerUser = "<your username>"
+$myTableauServerPW   = "<your server pw>"
+$TsFileExport        = "<your file to export from server>"
+$TsFileExportReZip   = "<your rezipped file>"                 ## use this for the re-zip
+$SetTsCalc           = "<your calculated field>"              ## name of calculated field to change
+
+$tsCalc = @"                                  
+SUM([Sales]) / 100
+"@                                            ## new calculation/formula
+
+
+############################################
+## The section below can remain unchanged  #
+## as long as variables above are updated  #
+############################################
+
+
 ## download the workbook from server
-tabcmd login -s https://<your server> -u '<your username>' --password-file <path to your pw file> --no-certcheck
-tabcmd get "https://<your server>/workbooks/<your wb to update>.twbx" --filename "<Wb Name>.twbx"
-tabcmd logout
+tabcmd login -s https://$myTableauServer -u $myTableauServerUser --password-file $myTableauServerPW --no-certcheck
+tabcmd get https://$myTableauServer/workbooks/$TsFileExport.twbx --filename $TsFileExport".twbx"
+#tabcmd logout
 
 ## Rename and extract
-Rename-Item -Path '.\<Wb Name>.twbx' -NewName '<New Name>.zip'
-$pathToZip = 'C:\TsWorkbookPrep\<New Name>.zip'
-$targetDir = 'C:\TsWorkbookPrep\<New Name Directory>'
+Rename-Item $TsFileExport".twbx" -NewName $TsFileExport".zip"
+$pathToZip = "C:\TsWorkbookPrep\$TsFileExport.zip"
+$targetDir = "C:\TsWorkbookPrep\$TsFileExport"
 
 #Unzip the file
 [System.IO.Compression.ZipFile]::ExtractToDirectory($pathToZip, $targetDir)
 
 
- ###################################
- ## update the formula            ##
- ###################################
+## parsing workbook to confirm caption ##
+<#
+$object = [xml](gc C:\TsWorkbookPrep\$TsFileExport\$TsFileExport.twb)
+cls; $object | select-xml "//datasources/datasource/column" | select -expand node | `
+ % {$a=$_ | select -Expand calculation -ea 0 | select -Property formula;$_} | `
+ where {$_.caption -like 'MyTestField'} | select name, caption, @{n='calc';e={$a | select -expand formula}}
+ #>
 
 
-$content = 'C:\TsWorkbookPrep\<New Name Directory>\<Wb Name>.twb'
+## update the xml ##
+$content = "C:\TsWorkbookPrep\$TsFileExport\$TsFileExport.twb"
 $xmldata = New-Object XML
 $xmldata.Load($content)
 
-#new calc
-$tsCalc = @"
-formula to update
-"@
-
 #testing new field name
-$newdata = $xmldata.SelectNodes('//workbook/datasources/datasource/column') | where {$_.Caption -like "<formula to update>"}
+$newdata = $xmldata.SelectNodes('//workbook/datasources/datasource/column') | where {$_.Caption -like "$SetTsCalc"}
 $newdata | ForEach-Object {$_.calculation.formula = $tsCalc }    
-$xmldata.Save("C:\TsWorkbookPrep\<New Name Directory>\<Wb Name>.twb")
+$xmldata.Save("C:\TsWorkbookPrep\$TsFileExport\$TsFileExport.twb")
 
 ## rezip the new file -- already loaded assembly above ##
-[System.IO.Compression.ZipFile]::CreateFromDirectory("C:\TsWorkbookPrep\<New Name Directory>","C:\TsWorkbookPrep\<New Name Directory>_v2.zip")
+[System.IO.Compression.ZipFile]::CreateFromDirectory("C:\TsWorkbookPrep\$TsFileExport","C:\TsWorkbookPrep\$TsFileExportReZip.zip")
 
 ## convert back to tableau twbx ##
-Rename-Item -Path 'C:\TsWorkbookPrep\<New Name Directory>_v2.zip' -NewName '<Wb Name>.twbx' -Force
+Rename-Item $TsFileExportReZip".zip" -NewName $TsFileExport".twbx" -Force
 
 ## login to server and republish wb ##
-tabcmd login -s https://<your server> -u '<your username>' --password-file <path to your pw file> -t uncertified --no-certcheck
-tabcmd publish 'C:\TsWorkbookPrep\<Wb Name>.twbx' --no-certcheck
+tabcmd login -s https://$myTableauServer -u $myTableauServerUser --password-file $myTableauServerPW --no-certcheck
+tabcmd delete --workbook $TsFileExport ## deleting old version before we publish new one
+tabcmd publish $TsFileExport".twbx" --no-certcheck
 tabcmd logout
+
+
+## Notes: might add PS Data Team script to remove older workbook and archive it ##
