@@ -59,11 +59,11 @@ $tsUsers[1..($tsUsers.count-1)] > C:\TsAdmin\TsSiteUsers_Final.csv
 
 foreach ($site in $sites) {
         if ($site -like 'uncertified') {
-            tabcmd login -s <your tab server> -t $site -u "<your username>" --password-file C:\TsAdmin\TsGuide\TsManual.txt --no-certcheck
+            tabcmd login -s <your tab server> -t $site -u "<your username>" --password-file C:\TsAdmin\TsGuide\<your encrypted pw>.txt --no-certcheck
             tabcmd createsiteusers "c:\TsAdmin\TsSiteUsers_Final.csv" --publisher --no-certcheck *>> C:\TsAdmin\TsServerUserLogging.txt
         } else
           {
-            tabcmd login -s <your tab server> -t $site -u "<your username>" --password-file C:\TsAdmin\TsGuide\TsManual.txt --no-certcheck
+            tabcmd login -s <your tab server> -t $site -u "<your username>" --password-file C:\TsAdmin\TsGuide\<your encrypted pw>.txt --no-certcheck
             tabcmd createsiteusers "c:\TsAdmin\TsSiteUsers_Final.csv" --no-publisher --no-certcheck *>> C:\TsAdmin\TsServerUserLogging.txt
           }
   }
