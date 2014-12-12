@@ -81,12 +81,21 @@ foreach($t in @(ipcsv .\TsDatasourcesGroupFilter.csv -Delimiter ";" | select *))
 [xml]$x = @" 
 $($t.InnerXml)
 "@
-    if ($x.groupfilter.'ui-enumeration' -eq 'inclusive') {$x.groupfilter | `
-     select -Property ui-domain, ui-enumeration, @{n='field';e={$_.level}}, @{n='field_member(s)';e={$_.member}},@{n='File';e={$t.Datasource}},@{n='site';e={$t.Site}},@{n='Date';e={Get-Date}} | `
-     Export-Csv -Path C:\TsAdmin\TsDatasource\TsDatasourcesGroupFilterFields.csv -Delimiter ";" -NoTypeInformation -Append} else{
-            $s = $x.SelectNodes("//groupfilter/*") | select -expand member -ErrorAction SilentlyContinue
+    if ($x.groupfilter.function -eq 'union' -and $x.groupfilter.'ui-enumeration' -eq 'inclusive') {$k = $x.SelectNodes("//groupfilter/*") | select -expand member -ErrorAction SilentlyContinue
             $x.groupfilter | select -Property ui-domain, ui-enumeration, @{n='field';e={$x.groupfilter.groupfilter | `
-            select -expand level -Unique}}, @{n='field_member(s)';e={$s -join ","}}, @{n='File';e={$t.Datasource}}, @{n='site';e={$t.Site}},@{n='Date';e={Get-Date}} | `
+            select -expand level -Unique}}, @{n='field_member(s)';e={$k -join ","}}, @{n='File';e={$t.Datasource}}, @{n='site';e={$t.Site}},@{n='Date';e={Get-Date}} | `
             Export-Csv -Path C:\TsAdmin\TsDatasource\TsDatasourcesGroupFilterFields.csv -Delimiter ";" -NoTypeInformation -Append
-     } #end else
+            } #end if 
+            
+            elseif ($x.groupfilter.'ui-enumeration' -eq 'inclusive') {$x.groupfilter | `
+                 select -Property ui-domain, ui-enumeration, @{n='field';e={$_.level}}, @{n='field_member(s)';e={$_.member}},@{n='File';e={$t.Datasource}},@{n='site';e={$t.Site}},@{n='Date';e={Get-Date}} | `
+                 Export-Csv -Path C:\TsAdmin\TsDatasource\TsDatasourcesGroupFilterFields.csv -Delimiter ";" -NoTypeInformation -Append
+                 } #end elseif 
+                 else{
+                        $s = $x.SelectNodes("//groupfilter/*") | select -expand member -ErrorAction SilentlyContinue
+                        $x.groupfilter | select -Property ui-domain, ui-enumeration, @{n='field';e={$x.groupfilter.groupfilter | `
+                        select -expand level -Unique}}, @{n='field_member(s)';e={$s -join ","}}, @{n='File';e={$t.Datasource}}, @{n='site';e={$t.Site}},@{n='Date';e={Get-Date}} | `
+                        Export-Csv -Path C:\TsAdmin\TsDatasource\TsDatasourcesGroupFilterFields.csv -Delimiter ";" -NoTypeInformation -Append
+                 } #end else
+                 
 } #end foreach
