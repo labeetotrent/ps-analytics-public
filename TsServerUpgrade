@@ -3,10 +3,10 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference= 'silentlycontinue' #changing this here b/c of old server paths throw an error. I change it back to 'Continue' at the end
 
 [xml]$a = Invoke-WebRequest -Uri 'http://community.tableausoftware.com/community/feeds/allcontent?community=2014&showProjectContent=false&recursive=false' -Method Get
-$b = $a.feed.entry | select -first 1 | select -expand title
+$b = ($a.feed.entry | select -first 1 | select -expand title) -split "," | select -First 1
 $c = $b -replace '[a-zA-Z]',''
-$TsVersion = $c.Trim() + ".0" #won't need to do this for future versions
-$TsVersionBefore = tabadmin version
+$TsVersion = $c.Trim()
+$TsVersionBefore = tabadmin version #takes ~8 seconds via measure-command -expression {tabadmin version}
 
 #credential stuff to secure email delivery
 $credPath = Join-Path (Split-Path $profile) TsUpdateScript.ps1.credential
