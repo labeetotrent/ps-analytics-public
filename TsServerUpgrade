@@ -1,27 +1,49 @@
-#Requires -Version 3
-Set-StrictMode -Version Latest
-$ErrorActionPreference= 'silentlycontinue' #changing this here b/c of old server paths throw an error. I change it back to 'Continue' at the end
+#Requires -Version 3.0
+function Set-TsUpgrade {
+<#
+    .SYNOPSIS
+        Adds Tableau Server newest version based off of RSS feed
 
+    .DESCRIPTION
+        This function will take input from the user in the form of a valid version from Tableau Server
+    
+    .EXAMPLE
+        Set-TsUpgrade -TsVersion 8.3.1
+#>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string[]]$TsVersion
+    )
+
+<# Omitting this b/c there's a bit of a concern when downloading an exe from a script (no surprise there)
 [xml]$a = Invoke-WebRequest -Uri 'http://community.tableausoftware.com/community/feeds/allcontent?community=2014&showProjectContent=false&recursive=false' -Method Get
 $b = ($a.feed.entry | select -first 1 | select -expand title) -split "," | select -First 1
 $c = $b -replace '[a-zA-Z]',''
 $TsVersion = $c.Trim()
-$TsVersionBefore = tabadmin version #takes ~8 seconds via measure-command -expression {tabadmin version}
-
-#credential stuff to secure email delivery
-$credPath = Join-Path (Split-Path $profile) TsUpdateScript.ps1.credential
-$credential = Import-Clixml $credPath
+#>
 
 ############## STEP 1 ##################### 
 #  download newest tableau server version # 
 ###########################################
 
-Remove-Item <path the the server install file>\* -Recurse -Filter *.exe -Verbose
+Remove-Item <your path to server exe>\* -Recurse -Filter *.exe -Force
 $Wget = New-Object System.Net.WebClient
 $url = "http://downloads.tableausoftware.com/esdalt/$TsVersion/TableauServer-64bit.exe"
-$localpath = "<path to the server install file>\TsServer_$TsVersion.exe"
+$localpath = "<your path to server exe>\TsServer_$TsVersion.exe"
 $Wget.DownloadFileAsync($url,$localpath)
-Start-Sleep -Seconds 180 # might use $wget.isbusy property here but 2 minutes should be enough
+
+
+do
+    {
+       "Done with $TsVersion download at: $(Get-Date)" > <file dump confirmation> 
+        
+    } 
+while ($Wget.IsBusy -eq 'False')
+
+#credential stuff to secure email delivery
+$credPath = Join-Path (Split-Path $profile) TsUpdateScript.ps1.credential
+$credential = Import-Clixml $credPath
 
 
 ############## STEP 2 ####################################
