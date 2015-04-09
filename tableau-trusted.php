@@ -12,11 +12,11 @@ function get_trusted_url($user,$server,$view_url,$site) {
   $params = ':embed=yes&:toolbar=yes';
 
   $ticket = get_trusted_ticket($server, $user, $_SERVER['REMOTE_ADDR'], $site);
-  if($ticket) { //since version 8.1 the code is alphanumeric
+  if($ticket==-1) { //since version 8.1 the code is alphanumeric
+    return -1;
+  } else {
     return "https://$server/trusted/$ticket/$view_url?$params";
   }
-  else 
-    return 0;
 }
 
 Function get_trusted_ticket($wgserver, $user, $remote_addr, $site) {
