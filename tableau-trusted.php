@@ -8,10 +8,10 @@
 //   $server = "tabserver";
 //   $view_url = "views/MyWorkbook/MyView";
 //
-function get_trusted_url($user,$server,$view_url) {
+function get_trusted_url($user,$server,$view_url,$site) {
   $params = ':embed=yes&:toolbar=yes';
 
-  $ticket = get_trusted_ticket($server, $user, $_SERVER['REMOTE_ADDR']);
+  $ticket = get_trusted_ticket($server, $user, $_SERVER['REMOTE_ADDR'], $site);
   if($ticket) { //since version 8.1 the code is alphanumeric
     return "https://$server/trusted/$ticket/$view_url?$params";
   }
@@ -19,10 +19,11 @@ function get_trusted_url($user,$server,$view_url) {
     return 0;
 }
 
-Function get_trusted_ticket($wgserver, $user, $remote_addr) {
+Function get_trusted_ticket($wgserver, $user, $remote_addr, $site) {
   $params = array(
     'username' => $user,
-    'client_ip' => $remote_addr
+    'client_ip' => $remote_addr,
+    'target_site' => $site
   );
 
   return do_post_request("https://$wgserver/trusted", $params);
