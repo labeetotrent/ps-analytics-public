@@ -1,0 +1,291 @@
+#Requires -Version 3 
+Set-StrictMode -Version Latest
+
+
+$Curdate = (Get-Date).ToString('yyyyMMdd')
+$DaysOld = 91 # adjust to your needs
+$pw = (gc -Path <directory path config pw>) | ConvertTo-SecureString -AsPlainText -Force
+$pwTmp = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($pw)
+$pwFinal = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($pwTmp)
+
+########################################################
+### Part 0: Get data from Postgres
+### NOTE: set up Tableau Server datasource with this file
+### 
+#########################################################
+
+
+if (Test-Path 'C:\<directory path>') {
+    Set-Location 'C:\<directory path>'
+    } else {
+        mkdir 'C:\<directory path>' ; Set-Location 'C:\<directory path>'
+       }
+
+Remove-Item 'C:\<directory path>\TsDataSourcePerf.csv','TsDataSourcePerf_Stage.csv' -Verbose -Force
+
+Import-Module 'C:\Users\<directory path>\Documents\WindowsPowerShell\Modules\TsGetExtract\TsGetExtract.psm1'
+
+$connectionString = 'Driver={PostgreSQL ANSI(x64)};Server=<your Server>; Port=8060; Database=workgroup; Uid=<username>; Pwd=<password>;'
+$query = @"
+select  distinct
+	wb.id as "Workbook_Id",
+	wb.name as "Workbook_Name", 
+	wb.luid as "Workbook_luid",
+	view.LastViewTIme as "Workbook_Last_View_Time",
+	wb.repository_url as "Workbook_RepositoryURL",
+	wb.created_at as "Workbook_CreatedDate",
+	wb.updated_at as "Workbook_UpdatedDate",
+	wb_su_owner.name as "Workbook_Owner_Username",
+	wb_su_owner.friendly_name as "Workbook_Owner_Name",
+	p.name as "Workbook_ProjectName",
+	wb.size as "Workbook_Size",
+	case when coalesce(wb.repository_data_id,1) = 1 then 'TWBX' else 'TWB' end as "Workbook_Type",
+	dc.server as "DataConnection_Server",
+	dc.dbclass as "DataConnection_SourceType",
+	dc.username as "DataConnection_Username",
+	dc.name as "DataConnection_Name",
+	dc.caption as "DataConnection_Caption",
+	dc.created_at as "DataConnection_CreatedDate",
+	dc.updated_at as "DataConnection_UpdatedDate",
+	s.name as "Site_Name",
+	ds.*,
+	current_date as "DateMarker"
+
+	
+from workbooks wb
+
+left join 
+	(SELECT distinct
+	views_workbook_id as WorkbookID
+	,max(last_view_time) over(partition by views_workbook_id) as LastViewTime
+	,site_id
+	FROM _views_stats 
+	) view on wb.id = view.WorkbookID --add site id / name as join but wb id should be unique across server
+left join data_connections dc on dc.owner_id = wb.id and dc.owner_type = 'Workbook'
+left join users wb_owner on wb_owner.id = wb.owner_id
+left join system_users wb_su_owner on wb_su_owner.id = wb_owner.system_user_id
+left join projects p on p.id = wb.project_id
+left join sites s on s.id = wb.site_id
+left join (
+
+	select  
+		ds.name as "DataSource_Name", 
+		ds_su_owner.name as "DataSource_Owner_Username",
+		ds_su_owner.friendly_name as "DataSource_Owner_Name",
+		ds.created_at as "DataSource_CreatedDate",
+		ds.updated_at as "DataSource_UpdatedDate",
+		ds_stats.last_access_time as "DataSource_AccessedAt", --this field may change in future releases
+		p.name as "DataSource_ProjectName",
+		ds.size as "DataSource_Size",
+		ds.db_class as "DataSource_SourceType",
+		ds.data_engine_extracts as "DataSource_TDE",
+		ds.repository_extract_data_id as "DataSourceRepoID",
+		ds.repository_data_id as "DataSourceDataIS",
+		ds.extracts_refreshed_at as "DataSource_ExtractRefreshTime",
+		ds_stats.nviews as "DataSource_nViews"
+	from datasources ds
+	inner join data_connections dc on dc.owner_id = ds.id and dc.owner_type = 'Datasource'
+	left join _datasources_stats ds_stats on ds_stats.datasource_id = ds.id
+	left join users ds_owner on ds_owner.id = ds.owner_id
+	left join system_users ds_su_owner on ds_su_owner.id = ds_owner.system_user_id
+	left join projects p on p.id = ds.project_id) ds on ds."DataSource_Name" = dc.name
+where s.name not like '<site name>'
+"@
+
+Get-TsExtract -connectionString $connectionString -query $query | `
+Select-Object -Skip 1 -Property * | `
+Export-Csv -Path 'C:\<directory path>\TsDataSourcePerf.csv' -NoTypeInformation -Delimiter ";" 
+
+##Cleaning##
+
+(Get-Content 'C:\<directory path>\TsDataSourcePerf.csv') | 
+Foreach-Object {$_ -replace "`""," "} | Set-Content 'TsDataSourcePerf_Stage.csv'
+
+tabcmd login --server '<server>' -t '<site name>' -username '<username>' -p $pwFinal --no-certcheck
+tabcmd refreshextracts --datasource "TsDataSourcePerf"  --project "<project name>"
+tabcmd logout
+
+#####################################################################
+### Part 1: download the file from Tableau Server
+### NOTE: add 'twb' or 'twbx' from file to out file for download
+### It's for multiple sites so adjust accordingly if you have > or < 
+#####################################################################
+
+
+if (Test-Path 'C:\<directory path>\TsDaysSinceLastView') {
+    Set-Location 'C:\<directory path>\TsDaysSinceLastView'
+    } else {
+        mkdir 'C:\<directory path>\TsDaysSinceLastView' ; Set-Location 'C:\<directory path>\TsDaysSinceLastView'
+       }
+
+
+tabcmd login --server '<server>' -t '<site name>' -username '<username>' -p $pwFinal --no-certcheck
+tabcmd get '/views/<your workbook view name>/WbViewTimes.csv' --filename "DaysSinceLastViewed_$($Curdate).csv"
+tabcmd logout
+
+ipcsv "DaysSinceLastViewed_$($Curdate).csv" -Delimiter "," | where {[convert]::ToInt32($_.'DaysSinceLastView', 10) -ge $DaysOld } | Export-Csv "DaysSinceLastViewed_$($Curdate)_Stage.csv" -Delimiter "," -NoTypeInformation
+
+foreach($wb in @(ipcsv "DaysSinceLastViewed_$($Curdate)_Stage.csv" -Delimiter ",")) {
+    if ($wb.'Site Name' -eq '<site name>')  {
+        $authtoken = $null
+        $tsPayload =
+        [xml]@"
+        <tsRequest> 
+         <credentials name="<credentials name>" password="<password>" >
+         <site contentUrl="<site name>" />
+         </credentials> 
+        </tsRequest>
+"@
+        $tsResponse = irm -uri "https://<server name>/api/2.0/auth/signin" -Method Post -Body $tsPayload
+        $authtoken = $tsResponse.tsResponse.credentials.token
+        $site = irm -uri "https://<server name>/api/2.0/sites/" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get ; $mySite = $site.tsResponse.sites.site | where {$_.name -like '<site name>'} | select -expand id
+        if ( $($wb.'Workbook Type') -eq 'TWB') {
+            $wbContent = irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get 
+            $wbContent.InnerXml > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type'.ToLower())"
+        } else { 
+            irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type').ToLower()" 
+        }
+        ## delete the wb now
+        irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Delete
+    }       
+     elseif ($wb.'Site Name' -eq '<site name>')  {
+        $authtoken = $null
+        $tsPayload =
+        [xml]@"
+        <tsRequest> 
+            <credentials name="<credentials name>" password="<password>" >
+            <site contentUrl="" />
+            </credentials> 
+        </tsRequest>
+"@
+        $tsResponse = irm -uri "https://<server name>/api/2.0/auth/signin" -Method Post -Body $tsPayload
+        $authtoken = $tsResponse.tsResponse.credentials.token
+        $site = irm -uri "https://<server name>/api/2.0/sites/" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get ; $mySite = $site.tsResponse.sites.site | where {$_.name -like '<site name>'} | select -expand id
+        if ( $($wb.'Workbook Type') -eq 'TWB') {
+            $wbContent = irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get 
+            $wbContent.InnerXml > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type'.ToLower())"
+        } else { 
+            irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type').ToLower()" 
+        }
+        ## delete the wb now
+        irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Delete
+   }
+     elseif ($wb.'Site Name' -eq '<site name>')  {
+        $authtoken = $null
+        $tsPayload =
+        [xml]@"
+        <tsRequest> 
+         <credentials name="<credentials name>" password="<password>" >
+         <site contentUrl="<site name>" />
+         </credentials> 
+        </tsRequest>
+"@
+        $tsResponse = irm -uri "https://<server name>/api/2.0/auth/signin" -Method Post -Body $tsPayload
+        $authtoken = $tsResponse.tsResponse.credentials.token 
+        $site = irm -uri "https://<server name>/api/2.0/sites/" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get ; $mySite = $site.tsResponse.sites.site | where {$_.name -like '<site name>'} | select -expand id
+        if ( $($wb.'Workbook Type') -eq 'TWB') {
+            $wbContent = irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get 
+            $wbContent.InnerXml > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type'.ToLower())"
+        } else { 
+            irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type').ToLower()" 
+        }
+        ## delete the wb now
+        irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Delete
+   }
+      elseif ($wb.'Site Name' -eq '<site name>')  {
+        $authtoken = $null
+        $tsPayload =
+        [xml]@"
+        <tsRequest> 
+         <credentials name="<credentials name>" password="<password>" >
+         <site contentUrl="<site name>" />
+         </credentials> 
+        </tsRequest>
+"@
+        $tsResponse = irm -uri "https://"<server name>/api/2.0/auth/signin" -Method Post -Body $tsPayload
+        $authtoken = $tsResponse.tsResponse.credentials.token
+        $site = irm -uri "https://<server name>/api/2.0/sites/" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get ; $mySite = $site.tsResponse.sites.site | where {$_.name -like '<site name>'} | select -expand id
+        if ( $($wb.'Workbook Type') -eq 'TWB') {
+            $wbContent = irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get 
+            $wbContent.InnerXml > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type'.ToLower())"
+        } else { 
+            irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type').ToLower()" 
+        }
+        ## delete the wb now
+        irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Delete
+   }
+      elseif ($wb.'Site Name' -eq '<site name>')   {
+        $authtoken = $null
+        $tsPayload =
+        [xml]@"
+        <tsRequest> 
+         <credentials name="<credentials name>" password="<password>" >
+         <site contentUrl="<site name>" />
+         </credentials> 
+"@
+        $tsResponse = irm -uri "https://<server name>/api/2.0/auth/signin" -Method Post -Body $tsPayload
+        $authtoken = $tsResponse.tsResponse.credentials.token
+        $site = irm -uri "https://<server name>/api/2.0/sites/" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get ; $mySite = $site.tsResponse.sites.site | where {$_.name -like '<site name>'} | select -expand id
+        if ( $($wb.'Workbook Type') -eq 'TWB') {
+            $wbContent = irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get 
+            $wbContent.InnerXml > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type'.ToLower())"
+        } else { 
+            irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type').ToLower()" 
+        }
+        ## delete the wb now
+        irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Delete
+    }
+      elseif ($wb.'Site Name' -eq '<site name>')  {
+        $authtoken = $null
+        $tsPayload =
+        [xml]@"
+        <tsRequest> 
+         <credentials name="<credentials name>" password="<password>" >
+         <site contentUrl="<site name>" />
+         </credentials> 
+        </tsRequest>
+"@
+        $tsResponse = irm -uri "https://<server name>/api/2.0/auth/signin" -Method Post -Body $tsPayload
+        $authtoken = $tsResponse.tsResponse.credentials.token 
+        $site = irm -uri "https://<server name>/api/2.0/sites/" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get ; $mySite = $site.tsResponse.sites.site | where {$_.name -like '<site name>'} | select -expand id
+        if ( $($wb.'Workbook Type') -eq 'TWB') {
+            $wbContent = irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get 
+            $wbContent.InnerXml > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type'.ToLower())"
+        } else { 
+            irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')/content" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Get > "$($wb.'Workbook RepositoryURL').$($wb.'Workbook Type').ToLower()" 
+        }
+        ## delete the wb now
+        irm -Uri "https://<server name>/api/2.0/sites/$($mySite)/workbooks/$($wb.'Workbook luid')" -Headers @{"X-Tableau-Auth"=$authtoken} -Method Delete
+    }
+    else {Write-Verbose -Message "Nothing to do. Exiting" -Verbose}
+}
+
+#last step - sign out
+irm -Uri https://<server name>/api/2.0/auth/signout -Method POST -Headers @{"X-Tableau-Auth"=$authtoken}
+[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pwTmp)
+
+
+
+###############################################################
+### Part 2: send these files to S3
+### When complete, remove only those 
+### that are in both locations (so we can remove the local file)
+###
+###############################################################
+
+foreach($item in @(gci -Filter "*.twb*")) {
+     Write-S3Object -BucketName "<bucket name>" -Key $item -File "C:\<directory path>\TsDaysSinceLastView\$item"  -Region "<AWS Region>"
+    }
+
+## remove locally now that they're stored on S3 
+if (Test-Path 'C:\<directory path>\TsDaysSinceLastView') {
+    Set-Location 'C:\<directory path>\TsDaysSinceLastView'
+    } else {
+        mkdir 'C:\<directory path>\TsDaysSinceLastView' ; Set-Location 'C:\<directory path>\TsDaysSinceLastView'
+       }
+
+
+$TsLocal = gci -filter "*.twb*" | select -expand name
+$TsAWS = (Get-S3Object -BucketName "<bucket name>" -Key "<Your AWS Key>" -Region "<AWS Region>" | select -expand key).replace("<Your AWS Key>/","")
+
+diff -ReferenceObject $TsAWS -DifferenceObject $TsLocal -IncludeEqual | where SideIndicator -EQ "==" | select -expand InputObject | Remove-Item 
