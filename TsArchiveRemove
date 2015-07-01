@@ -125,6 +125,10 @@ tabcmd logout
 
 ipcsv "DaysSinceLastViewed_$($Curdate).csv" -Delimiter "," | where {[convert]::ToInt32($_.'DaysSinceLastView', 10) -ge $DaysOld } | Export-Csv "DaysSinceLastViewed_$($Curdate)_Stage.csv" -Delimiter "," -NoTypeInformation
 
+
+$myOldWorkbooks = ipcsv "DaysSinceLastViewed_$($Curdate)_Stage.csv" -Delimiter ","
+if(!($myOldWorkbooks -eq $null)) {
+
 foreach($wb in @(ipcsv "DaysSinceLastViewed_$($Curdate)_Stage.csv" -Delimiter ",")) {
     if ($wb.'Site Name' -eq '<site name>')  {
         $authtoken = $null
@@ -288,4 +292,7 @@ if (Test-Path 'C:\<directory path>\TsDaysSinceLastView') {
 $TsLocal = gci -filter "*.twb*" | select -expand name
 $TsAWS = (Get-S3Object -BucketName "<bucket name>" -Key "<Your AWS Key>" -Region "<AWS Region>" | select -expand key).replace("<Your AWS Key>/","")
 
-diff -ReferenceObject $TsAWS -DifferenceObject $TsLocal -IncludeEqual | where SideIndicator -EQ "==" | select -expand InputObject | Remove-Item 
+diff -ReferenceObject $TsAWS -DifferenceObject $TsLocal -IncludeEqual | where SideIndicator -EQ "==" | select -expand InputObject | Remove-Item
+} # end if test for null data in the master Tableau sheet. Basically don't do anything if there's nothing to remove
+
+else {Write-Verbose -Message "Nothing to remove" -Verbose}
